@@ -83,9 +83,9 @@ The model is very strong at catching real adjustments (99% recall) — it rarely
 
 | Metric | Validation | Test |
 |--------|-----------|------|
-| MAE | $1,183 | $1,176 |
-| RMSE | $1,561 | $1,546 |
-| R² | **0.9977** | **0.9977** |
+| MAE | $1,405 | $1,416 |
+| RMSE | $1,817 | $1,825 |
+| R² | **0.9968** | **0.9968** |
 
 R² of 0.9977 means the model explains 99.77% of the variance in credit line amounts — extremely tight predictions on a target that ranges from $1,000 to $150,000.
 
