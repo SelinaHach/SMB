@@ -1,5 +1,3 @@
-# SMB
-
 # SMB Dynamic Credit Line
 
 Predicts whether a small business's credit line should be adjusted month-over-month — and if so, predicts the new amount.
