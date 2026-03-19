@@ -1,155 +1,223 @@
 # SMB Dynamic Credit Line
 
-Predicts whether a small business's credit line should be adjusted month-over-month — and if so, predicts the new amount.
+A machine learning pipeline that predicts whether a small business's credit line will be adjusted month-over-month — and if so, predicts the new credit line amount.
 
 ---
 
 ## The Problem
 
-Each month, lenders must decide: does this business's credit line need to change? This project automates that decision with a two-stage ML pipeline:
+Every month, lenders must decide: should this business's credit line change? Too low and you limit a good customer. Too high and you take on unnecessary risk. This project automates that decision using two models working together:
 
-1. **Classification** — Will the credit line change this month? (Yes / No)
-2. **Regression** — If yes, what should the new credit line amount be?
+- **Stage 1 — Classification**: Will the credit line change this month?
+- **Stage 2 — Regression**: If yes, what should the new amount be?
 
 ---
 
 ## Dataset
 
-`SMB_Port_Dynamic_Line.csv` — 124,436 rows across 6,868 unique businesses, averaging 18 months per business.
+**File:** `SMB_Port_Dynamic_Line.csv`
+
+| Stat | Value |
+|------|-------|
+| Total rows | 124,436 |
+| Unique businesses | 6,868 |
+| Avg months per business | ~18 months |
+| Total features | 25 |
+
+Each row represents one business in one month (Month-on-Book = MOB). Features cover business profile, financial health, and credit behavior.
 
 ---
 
-## Key Findings
+## Key Findings from EDA
 
-### Credit Line Adjustments Are the Norm
-**83.9% of all monthly records show a credit line change.** Only 16.1% stay flat — meaning lenders are actively managing these lines far more often than leaving them static.
+### Credit lines span a wide range
+- Average: **$38,285**
+- Median: **$37,500**
+- Range: **$1,000 → $111,000**
+- 50% of businesses fall between $18,500 and $55,500
 
-### Bank Balance Drives Everything
-Correlation with `DynamicCreditLine`:
+### Bank balance is the #1 predictor — not FICO
+Pearson correlation with `DynamicCreditLine`:
 
 | Feature | Correlation |
 |---------|-------------|
-| Avg Monthly Bank Balance | **+0.84** |
-| Max Monthly Bank Balance | **+0.84** |
-| Min Monthly Bank Balance | **+0.83** |
-| Annual Revenue | **+0.81** |
-| Initial Credit Line | **+0.47** |
-| FICO Score | **+0.24** |
-| Has Collateral | **+0.22** |
+| Avg Monthly Bank Balance | **+0.845** |
+| Max Monthly Bank Balance | **+0.838** |
+| Min Monthly Bank Balance | **+0.833** |
+| Annual Revenue | **+0.807** |
+| Initial Credit Line | **+0.470** |
+| Has Biz Checking Account | **+0.240** |
+| FICO Score | **+0.239** |
+| Has Collateral | **+0.219** |
+| Num Vendor Tradelines | **+0.204** |
+| Credit Utilization | **-0.366** |
+| Debt-to-Income Ratio | **-0.311** |
+| Ever Had Charge-Off | **-0.203** |
 
-Bank balance (avg, min, max) is the strongest signal by far — stronger than revenue, FICO score, or collateral. Lenders are essentially tracking cash flow consistency, not just credit score.
+Cash flow consistency is overwhelmingly the strongest signal — stronger than FICO score, collateral, or years in business.
 
-### Industry Has a 5× Range in Credit Lines
-Average credit line by industry:
+### Industry drives a 3× gap in credit lines
 
 | Industry | Avg Credit Line |
 |----------|----------------|
-| Chemical Manufacturing | $84,733 |
-| Wholesale Trade | $83,915 |
-| Construction | $81,914 |
-| Trucking | $81,700 |
-| Real Estate & Rental | $76,718 |
-| Restaurant | $32,234 |
-| Health Care & Social Assistance | $25,523 |
-| Educational Service | $17,345 |
+| Wholesale Trade | $55,084 |
+| Trucking | $53,554 |
+| Chemical Manufacturing | $52,476 |
+| Construction | $51,713 |
+| Real Estate & Rental | $51,230 |
+| Finance & Insurance | $41,839 |
+| Restaurant | $33,704 |
+| Health Care & Social Assistance | $27,102 |
+| Educational Service | **$18,394** ← lowest |
 
-Capital-intensive industries get nearly 5× more credit than education and healthcare.
-
-### Risk Profile of the Portfolio
-- **22.3%** of businesses have ever had a charge-off — meaningful default risk in this SMB portfolio
-- **71.3%** have collateral backing their loan
+### Risk signals in the portfolio
+- **22.3%** of businesses have ever had a charge-off
+- **71.3%** have collateral
 - **79.6%** have a business checking account
 
-### Data Quality
-- Only one column had missing values: `Collateral_Type` — 35,654 missing (28.6%), imputed as `'Unknown'`
-- Outliers removed via IQR method: ~25,000 rows total cleaned from the dataset
+---
+
+## Data Cleaning
+
+### Missing Values
+Only one column had missing values: `Collateral_Type` — 35,654 missing (28.6% of rows). Imputed with `'Unknown'`.
+
+### Outlier Removal — IQR Method
+Removed rows where values fell below `Q1 - 1.5×IQR` or above `Q3 + 1.5×IQR`.
+
+| Column | Rows Removed |
+|--------|-------------|
+| Current_Avg_Days_Beyond_Terms | 11,521 |
+| Current_Avg_Monthly_Bank_Balance | 7,324 |
+| Current_Annual_Revenue | 4,607 |
+| Current_Min_Monthly_Bank_Balance | 4,283 |
+| Current_Max_Monthly_Bank_Balance | 1,833 |
+| Current_Debt_To_Income_Ratio_SB | 1,626 |
+| Current_Biz_Credit_Utilization | 249 |
+| Num_Vendor_Tradelines | 156 |
+| Current_Num_NSF_Last_12M | 108 |
+| DynamicCreditLine | 106 |
+| **Total removed** | **31,813 rows** |
+
+**124,436 → 92,623 rows** after cleaning.
+
+---
+
+## Train / Val / Test Split
+
+| Split | Rows | Share |
+|-------|------|-------|
+| Train | 64,836 | 70% |
+| Validation | 13,893 | 15% |
+| Test | 13,894 | 15% |
+
+---
+
+## Feature Engineering
+
+Created `AdjustCreditLine` as the classification target:
+- **1** = credit line changed from previous month
+- **0** = stayed the same
+
+`Industry_Type` was label-encoded into `industry_code`. Categorical columns (`Loan_Purpose`, `Collateral_Type`) were one-hot encoded. Numerical columns were standardized with `StandardScaler`.
 
 ---
 
 ## Model Results
 
-### Stage 1 — Classification (Will the credit line adjust?)
+### Stage 1 — XGBoost Classifier
 
-| Metric | Validation | Test |
-|--------|-----------|------|
-| Accuracy | **91.5%** | **91.2%** |
-| Precision (Adjust) | 0.91 | 0.91 |
-| Recall (Adjust) | 0.99 | 0.99 |
-| F1 (Adjust) | 0.95 | 0.95 |
+Predicts whether the credit line will adjust this month.
 
-The model is very strong at catching real adjustments (99% recall) — it rarely misses a case that should change.
+**Validation Set:**
 
-### Stage 2 — Regression (How much should the new credit line be?)
+| Class | Precision | Recall | F1 |
+|-------|-----------|--------|----|
+| No Adjustment (0) | 0.95 | 0.49 | 0.64 |
+| Adjustment (1) | 0.91 | **0.99** | **0.95** |
+| **Accuracy** | | | **91.38%** |
 
-| Metric | Validation | Test |
-|--------|-----------|------|
-| MAE | $1,405 | $1,416 |
-| RMSE | $1,817 | $1,825 |
-| R² | **0.9968** | **0.9968** |
+**Test Set:**
 
-R² of 0.9968 means the model explains 99.68% of the variance in credit line amounts — extremely tight predictions on a target that ranges from $1,000 to $150,000.
+| Class | Precision | Recall | F1 |
+|-------|-----------|--------|----|
+| No Adjustment (0) | 0.94 | 0.49 | 0.64 |
+| Adjustment (1) | 0.91 | **0.99** | **0.95** |
+| **Accuracy** | | | **91.20%** |
 
----
-
-## Most Important Features
-
-**For predicting IF a credit line changes:**
-
-1. Initial Credit Line
-2. Avg Monthly Bank Balance
-3. Min Monthly Bank Balance
-4. Max Monthly Bank Balance
-5. Annual Revenue
-6. Credit Utilization
-7. Debt-to-Income Ratio
-8. FICO Score
-9. Month-on-Book (MOB)
-10. Initial Loan Amount
-
-**For predicting HOW MUCH the new credit line will be:**
-
-1. Avg Monthly Bank Balance *(by far the most important — 59.6% importance)*
-2. Initial Credit Line *(23.5%)*
-3. Max Monthly Bank Balance
-4. Min Monthly Bank Balance
-5. Annual Revenue
+The model catches **99% of all real adjustments** — it almost never misses a month where the credit line actually changed. The lower recall on "no change" (49%) is an acceptable trade-off in a portfolio where adjustments are the norm.
 
 ---
 
-## Pipeline
+### Stage 2 — XGBoost Regressor
+
+Trained only on rows where the classifier predicted an adjustment. Dataset size: **113,837 rows**.
+
+| Metric | Validation | Test |
+|--------|-----------|------|
+| MAE | $1,405 | **$1,416** |
+| RMSE | $1,817 | **$1,825** |
+| R² | 0.9968 | **0.9968** |
+
+R² of **0.9968** means the model explains **99.68% of variance** in credit line amounts. On a target ranging from $1,000 to $111,000, an average error of ~$1,400 is extremely precise.
+
+---
+
+## Collateral Type — Adjustment Rate
+
+| Collateral Type | Adjustment Rate |
+|----------------|----------------|
+| Accounts Receivable | **95.0%** |
+| Inventory | 94.6% |
+| Real Estate | 93.8% |
+| Intellectual Property | 93.4% |
+| Equipment | 93.3% |
+| Cash | 91.5% |
+
+Businesses with Accounts Receivable collateral see the highest rate of credit line changes — consistent with more dynamic, revenue-driven lending relationships.
+
+---
+
+## Pipeline Summary
 
 ```
-Raw Data (124,436 rows)
-   ↓
+Raw Data — 124,436 rows
+        ↓
 EDA + Correlation Analysis
-   ↓
-Outlier Removal — IQR Method → 92,623 rows remaining
-   ↓
-Impute missing Collateral_Type → 'Unknown'
-   ↓
-Train / Val / Test Split (70 / 15 / 15)
-   ↓
-Feature Engineering: create AdjustCreditLine target
-   ↓
-XGBoost Classifier → predict if credit line changes
-   ↓
-XGBoost Regressor → predict new credit line amount
-   ↓
-Export: SMB_Dynamic_Credit_Line_Output.csv
+        ↓
+Outlier Removal (IQR) — 92,623 rows remaining
+        ↓
+Impute Collateral_Type → 'Unknown'
+        ↓
+Train / Val / Test Split  (70 / 15 / 15)
+        ↓
+Feature Engineering — create AdjustCreditLine target
+        ↓
+XGBoost Classifier ——— Accuracy: 91.2%  |  Recall (Adjust): 99%
+        ↓
+XGBoost Regressor  ——— R²: 0.9968  |  MAE: $1,416
+        ↓
+Export — SMB_Dynamic_Credit_Line_Output.csv
 ```
 
 ---
 
-## Output
+## Output File
 
-Two new columns added to the exported CSV:
+`SMB_Dynamic_Credit_Line_Output.csv` — original data with two new columns:
 
-| Column | Description |
-|--------|-------------|
-| `Predicted_AdjustCreditLine` | 0 = no change, 1 = adjustment predicted |
-| `Predicted_DynamicCreditLine` | Predicted new credit line amount |
+| New Column | Description |
+|------------|-------------|
+| `Predicted_AdjustCreditLine` | 1 = adjustment predicted, 0 = no change |
+| `Predicted_DynamicCreditLine` | Predicted credit line amount (only filled where adjustment predicted) |
 
 ---
 
+## How to Run
 
-**Dependencies:** `pandas` `numpy` `matplotlib` `seaborn` `scikit-learn` `xgboost`
+1. Open [Google Colab](https://colab.research.google.com/)
+2. Upload `SMB.ipynb` and `SMB_Port_Dynamic_Line.csv`
+3. Confirm the CSV path is `/content/SMB_Port_Dynamic_Line.csv`
+4. Run all cells top to bottom — last cell downloads the output CSV
+
+**Dependencies:** `pandas` · `numpy` · `matplotlib` · `seaborn` · `scikit-learn` · `xgboost`
