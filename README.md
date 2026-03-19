@@ -213,11 +213,4 @@ Export — SMB_Dynamic_Credit_Line_Output.csv
 
 ---
 
-## How to Run
-
-1. Open [Google Colab](https://colab.research.google.com/)
-2. Upload `SMB.ipynb` and `SMB_Port_Dynamic_Line.csv`
-3. Confirm the CSV path is `/content/SMB_Port_Dynamic_Line.csv`
-4. Run all cells top to bottom — last cell downloads the output CSV
-
 **Dependencies:** `pandas` · `numpy` · `matplotlib` · `seaborn` · `scikit-learn` · `xgboost`
